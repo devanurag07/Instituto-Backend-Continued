@@ -12,16 +12,17 @@ from rest_framework import serializers
 from accounts.serializers import UserSerializer
 from batch.models import Document
 from institute.models import Institute
-
+from channels.db import database_sync_to_async
 # Check For Blocked MSGS
 
 
+@database_sync_to_async
 def is_blocked(sender, receiver):
 
     sender_blocked = Blocked.objects.filter(
         blocked_by=receiver, victim=sender).exists()
 
-    if(sender_blocked):
+    if (sender_blocked):
         return {
             "blocked": True,
             "error": "You can't send msg to the user"
@@ -30,7 +31,7 @@ def is_blocked(sender, receiver):
         receiver_blocked = Blocked.objects.filter(
             blocked_by=sender, victim=receiver).exists()
 
-        if(receiver_blocked):
+        if (receiver_blocked):
             return {
                 "blocked": True,
                 "error": "Unblock The User First.."
@@ -39,79 +40,83 @@ def is_blocked(sender, receiver):
         "blocked": False,
     }
 
-def has_msg_perm(sender,receiver):
-    sender_role=sender.role.lower()
-    receiver_role=receiver.role.lower()
 
-    if(sender_role=="student" and receiver_role=="student"):
+@database_sync_to_async
+def has_msg_perm(sender, receiver):
+    sender_role = sender.role.lower()
+    receiver_role = receiver.role.lower()
+
+    if (sender_role == "student" and receiver_role == "student"):
         return False
-    
-    if(sender_role=="teacher" and receiver_role=="teacher"):
+
+    if (sender_role == "teacher" and receiver_role == "teacher"):
         # Set Intersection
-        common_institutes=sender.institutes.all() & receiver.institutes.all()
-        if(common_institutes.exists()):
+        common_institutes = sender.institutes.all() & receiver.institutes.all()
+        if (common_institutes.exists()):
             return True
         return False
-    elif (sender_role=="teacher" and receiver_role=="owner"):
-        sender_institutes=Institute.objects.filter(teachers__in=[sender])
-        receiver_institute=Institute.objects.filter(owner=receiver)
-        common_institutes=sender_institutes & receiver_institute
-        if(common_institutes.exists()):
+    elif (sender_role == "teacher" and receiver_role == "owner"):
+        sender_institutes = Institute.objects.filter(teachers__in=[sender])
+        receiver_institute = Institute.objects.filter(owner=receiver)
+        common_institutes = sender_institutes & receiver_institute
+        if (common_institutes.exists()):
             return True
 
-    elif (sender_role=="teacher" and receiver_role=="student"):
-        sender_batches=Batch.objects.filter(teacher=sender)
-        receiver_batches=Batch.objects.filter(students__in=[receiver])
-        common_batches=sender_batches & receiver_batches
-        if(common_batches.exists()):
+    elif (sender_role == "teacher" and receiver_role == "student"):
+        sender_batches = Batch.objects.filter(teacher=sender)
+        receiver_batches = Batch.objects.filter(students__in=[receiver])
+        common_batches = sender_batches & receiver_batches
+        if (common_batches.exists()):
             return True
         return False
-    elif (sender_role=="owner" and receiver_role=="teacher"):
-        receiver_institute=Institute.objects.filter(teachers__in=[receiver])
-        sender_institutes=Institute.objects.filter(owner=sender)
-        common_institutes=sender_institutes & receiver_institute
-        if(common_institutes.exists()):
+    elif (sender_role == "owner" and receiver_role == "teacher"):
+        receiver_institute = Institute.objects.filter(teachers__in=[receiver])
+        sender_institutes = Institute.objects.filter(owner=sender)
+        common_institutes = sender_institutes & receiver_institute
+        if (common_institutes.exists()):
             return True
         else:
             return False
 
-    elif (sender_role=="owner" and receiver_role=="student"):
-        sender_institutes=Institute.objects.filter(owner=sender)
-        receiver_institutes=Institute.objects.filter(batches__students__in=[receiver])
+    elif (sender_role == "owner" and receiver_role == "student"):
+        sender_institutes = Institute.objects.filter(owner=sender)
+        receiver_institutes = Institute.objects.filter(
+            batches__students__in=[receiver])
 
-        common_institutes=sender_institutes & receiver_institutes
-        if(common_institutes.exists()):
+        common_institutes = sender_institutes & receiver_institutes
+        if (common_institutes.exists()):
             return True
         return False
 
-    elif (sender_role=="student" and receiver_role=="owner"):
-        receiver_institutes=Institute.objects.filter(owner=receiver)
-        sender_institutes=Institute.objects.filter(batches__students__in=[sender])
+    elif (sender_role == "student" and receiver_role == "owner"):
+        receiver_institutes = Institute.objects.filter(owner=receiver)
+        sender_institutes = Institute.objects.filter(
+            batches__students__in=[sender])
 
-        common_institutes=sender_institutes & receiver_institutes
-        if(common_institutes.exists()):
+        common_institutes = sender_institutes & receiver_institutes
+        if (common_institutes.exists()):
             return True
         return False
 
-    elif (sender_role=="student" and receiver_role=="teacher"):
-        receiver_batches=Batch.objects.filter(teacher=receiver)
-        sender_batches=Batch.objects.filter(students__in=[sender])
-        common_batches=sender_batches & receiver_batches
-        if(common_batches.exists()):
+    elif (sender_role == "student" and receiver_role == "teacher"):
+        receiver_batches = Batch.objects.filter(teacher=receiver)
+        sender_batches = Batch.objects.filter(students__in=[sender])
+        common_batches = sender_batches & receiver_batches
+        if (common_batches.exists()):
             return True
         return False
 
     return False
 
 
-# Creates OR Sent Msg Personal
+@database_sync_to_async
 def create_msg(request, msg, reciever_id):
     user = request.user
     reciever_user = get_model(User, pk=int(reciever_id))
     is_reply = request.data.get("is_reply", None)
     parent_msg_id = request.data.get("parent_msg", None)
 
-    if(not reciever_user['exist']):
+    if (not reciever_user['exist']):
         return {
             "success": False,
             "msg": None,
@@ -125,8 +130,7 @@ def create_msg(request, msg, reciever_id):
 
     # IF Communication is Std -> Std
 
-
-    if(not has_msg_perm(user,reciever_user)):
+    if (not has_msg_perm(user, reciever_user)):
         return {
             "success": False,
             "msg": None,
@@ -135,7 +139,7 @@ def create_msg(request, msg, reciever_id):
 
     # Checking Blockage
     has_blocked = is_blocked(user, reciever_user)
-    if(has_blocked["blocked"]):
+    if (has_blocked["blocked"]):
         return {
             "success": False,
             "msg": None,
@@ -145,9 +149,9 @@ def create_msg(request, msg, reciever_id):
     # Creating Msg
     message = Message(message=msg, sender=user, reciever=reciever_user)
 
-    if(is_reply and parent_msg_id):
+    if (is_reply and parent_msg_id):
         parent_msg = get_model(Message, pk=int(parent_msg_id))
-        if(parent_msg["exist"]):
+        if (parent_msg["exist"]):
             parent_msg = parent_msg["data"]
             message.parent_msg = parent_msg
             message.is_reply = True
@@ -163,24 +167,24 @@ def create_msg(request, msg, reciever_id):
     }
 
 
-
 # Check Permission Of Sending MSG
+@database_sync_to_async
 def has_msg_perm_batch(batch, user):
     user_type = user.role.lower()
 
-    if(user_type == "owner"):
-        if(user == batch.institute.owner):
+    if (user_type == "owner"):
+        if (user == batch.institute.owner):
             True
         return False
 
-    if(user_type == "teacher"):
-        if(batch.teacher == user):
+    if (user_type == "teacher"):
+        if (batch.teacher == user):
             return True
         return False
 
-    if(user_type == "student"):
+    if (user_type == "student"):
         if user in batch.students.all():
-            if(user not in batch.blacklist_students.all()):
+            if (user not in batch.blacklist_students.all()):
                 return True
             return False
         return False
@@ -189,13 +193,14 @@ def has_msg_perm_batch(batch, user):
 # Creates MSG for Batc
 
 
+@database_sync_to_async
 def create_batch_msg(request, msg, batch_id):
     user = request.user
     batch = get_model(Batch, pk=int(batch_id))
     is_reply = request.data.get("is_reply", None)
     parent_msg_id = request.data.get("parent_msg", None)
 
-    if(not batch['exist']):
+    if (not batch['exist']):
         return {
             "success": False,
             "msg": None,
@@ -213,9 +218,9 @@ def create_batch_msg(request, msg, batch_id):
 
     message = Message(message=msg, sender=user, batch=batch)
 
-    if(is_reply and parent_msg_id):
+    if (is_reply and parent_msg_id):
         parent_msg = get_model(Message, pk=int(parent_msg_id))
-        if(parent_msg["exist"]):
+        if (parent_msg["exist"]):
             parent_msg = parent_msg["data"]
             message.parent_msg = parent_msg
             message.is_reply = True
@@ -232,6 +237,7 @@ def create_batch_msg(request, msg, batch_id):
 
 
 # Retrieve MSGS
+@database_sync_to_async
 def get_convs(user):
     sent_msgs_recivers = Message.objects.filter(
         is_batch_msg=False, sender=user).values_list("receiver")
@@ -240,7 +246,7 @@ def get_convs(user):
 
 
 # BatchView
-
+@database_sync_to_async
 def get_batch_details(batch):
 
     class MessageSerializer(serializers.ModelSerializer):

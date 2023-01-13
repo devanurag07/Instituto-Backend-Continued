@@ -8,6 +8,7 @@ from batch.models import Batch
 from institute.models import Institute
 from .models import ActiveUser
 from batch.services import has_msg_perm
+from .utils import ws_response
 
 
 class InstituteNotifications(AsyncJsonWebsocketConsumer):
@@ -38,7 +39,7 @@ class InstituteNotifications(AsyncJsonWebsocketConsumer):
         user_role = await self.get_role()
 
         if (user_role != 'owner'):
-            self.send({
+            await self.send({
                 "success": False,
                 "msg": None,
                 "error": "You are not owner"
@@ -137,6 +138,7 @@ class UserToUserRealTime(AsyncJsonWebsocketConsumer):
 
         self.user = self.scope["user"]
         # Adding User to Channel
+        await self.remove_user()
         await self.add_user()
         await self.accept()
 
@@ -144,24 +146,26 @@ class UserToUserRealTime(AsyncJsonWebsocketConsumer):
         await self.remove_user()
         await self.close(code=code)
 
-    def receive(self, text_data=None, bytes_data=None, **kwargs):
+    async def receive(self, text_data=None, bytes_data=None, **kwargs):
         data = json.loads(text_data)
         receiver_mobile = data["mobile"]
-        message = data["message"]
+        data = data["payload"]
 
-        channel_name, receiver_user = self.get_user_channel(receiver_mobile)
+        # Get Activate User Channel Name
+        channel_name, receiver_user = await self.get_user_channel(receiver_mobile)
 
         if receiver_user:
             if (has_msg_perm(receiver_user, self.user)):
                 if (channel_name):
-                    self.channel_layer.send(channel_name, {
-                        "type": "chat.receive",
-                        "payload": message
-                    })
+                    ws_resp = ws_response("chat.receive", data, "Msg Sent")
+                    await self.channel_layer.send(channel_name, ws_resp)
             else:
-                return
+                ws_resp = ws_response(
+                    "", {}, "You do not have permission to send Message.", 300)
+                await self.send(ws_resp)
         else:
-            pass
+            ws_resp = ws_response("", {}, "The User Doesn't exists.", 404)
+            await self.send(ws_resp)
 
     async def chat_receive(self, data):
         data = data["payload"]
@@ -169,7 +173,7 @@ class UserToUserRealTime(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def get_user_channel(self, mobile):
-        to_user = get_model(User, id=int(mobile))
+        to_user = get_model(User, mobile=int(mobile))
         if (not to_user["exist"]):
             return False, False
 
@@ -179,25 +183,17 @@ class UserToUserRealTime(AsyncJsonWebsocketConsumer):
         if (receiver_channel.exists()):
             receiver_channel = receiver_channel.first()
         else:
-            return False, True
+            return False, to_user
 
         return receiver_channel.channel_name, receiver_channel.user
 
     @database_sync_to_async
     def add_user(self):
-        self.remove_user()
+        print("User Added to Channel (ActiveUser)")
         ActiveUser.objects.create(user=self.user,
                                   channel_name=self.channel_name)
 
     @database_sync_to_async
     def remove_user(self):
-        ActiveUser.objects.filter(user=self.user).delete()
-
-
-class TestChannel(AsyncJsonWebsocketConsumer):
-
-    async def connect(self):
-        return await self.accept()
-
-    async def disconnect(self, code):
-        return await self.close(code)
+        output = ActiveUser.objects.filter(user=self.user).delete()
+        print(str(output) + " Removed ")

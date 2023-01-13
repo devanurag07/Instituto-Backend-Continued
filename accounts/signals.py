@@ -8,9 +8,4 @@ from django.dispatch import receiver
 def create_profile(sender, instance, created, **kwargs):
     if (created):
         role = instance.role.lower()
-        if (role == "student"):
-            UserProfile.objects.create(user=instance)
-        elif (role == "owner"):
-            UserProfile.objects.create(user=instance)
-        else:
-            pass
+        UserProfile.objects.get_or_create(user=instance)

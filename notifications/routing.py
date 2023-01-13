@@ -7,5 +7,4 @@ websocket_urlpatterns = [
     path("ws/batchnotifications", consumers.BatchNotifications.as_asgi()),
     path("ws/institutenotifications",
          consumers.InstituteNotifications.as_asgi()),
-    path("ws/test", consumers.TestChannel.as_asgi()),
 ]

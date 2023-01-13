@@ -44,6 +44,8 @@ def create_batch_requests(student, institute_code, batch_codes):
             }
         ]
 
+        return False, errors
+
     # Validation
     for batch_code in batch_codes:
         batch_list = institute.batches.filter(
