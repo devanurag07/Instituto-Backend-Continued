@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from accounts.models import User
 from accounts.utils import get_model
-
+from notifications.models import Notification
 # Owner
 
 
@@ -28,7 +28,7 @@ class SubjectApi(ModelViewSet):
         data = request.data
         success, req_data = required_data(data, ["subject"])
 
-        if(not success):
+        if (not success):
             errors = req_data
             return Response(resp_fail("Missing Arguments", {
                 "errors": errors
@@ -54,7 +54,7 @@ class SubjectApi(ModelViewSet):
         success, req_data = required_data(
             data, ["teacher_id", "subjects", "grades"])
 
-        if(not success):
+        if (not success):
             return Response(resp_fail("Missing Required Data", {
                 "errors": req_data
             }, error_code=601))
@@ -66,13 +66,13 @@ class SubjectApi(ModelViewSet):
         teacher = get_model(User, pk=int(teacher_id),
                             role="teacher".capitalize())
 
-        if(not teacher["exist"]):
+        if (not teacher["exist"]):
             return Response(resp_fail("Teacher Does Not exist", {}, error_code=602))
         teacher = teacher["data"]
 
         # Check Institute Existence
         institute = get_insitute(request.user)
-        if(not institute["exist"]):
+        if (not institute["exist"]):
             return Response(resp_fail("Institute Does Not exist", {}, error_code=603))
         institute = institute["data"]
 
@@ -80,7 +80,7 @@ class SubjectApi(ModelViewSet):
         teacher_request = get_model(
             TeacherRequest, institute=institute, teacher=teacher)
 
-        if(not teacher_request["exist"]):
+        if (not teacher_request["exist"]):
             # return no perm to assign subjects
             return Response(resp_fail("Teacher Request Does Not exist", {}, error_code=604))
         teacher_request = teacher_request["data"]
@@ -89,7 +89,7 @@ class SubjectApi(ModelViewSet):
         assigned, data = assign_subjects(teacher=teacher,
                                          subjects=subjects, grades=grades, institute=institute)
 
-        if(not assigned):
+        if (not assigned):
             return Response(resp_fail("Invalid Data", {"errors": data["errors"]}))
 
         if institute in teacher.institutes.all():
@@ -102,9 +102,19 @@ class SubjectApi(ModelViewSet):
             teacher_request.approved = True
             teacher_request.save()
 
+        # Notification
+        Notification.objects.create(
+            sender=self.request.user,
+            user=teacher,
+            noti_type="teacher_request_accepted",
+            noti_msg=f"{self.request.user.first_name} (owenr) Accepted The Request by Assigning These Subjects {str(subjects)}"
+        )
+
         return Response(resp_success(
             "Subject Access Provided Successfully", {
-                "subject_accs": data
+                "subject_accs": data,
+                "notify": True,
+                "notify_user": teacher.id
             }), 201)
 
 
@@ -116,7 +126,7 @@ class InstituteApi(ViewSet):
         user = request.user
         institute = get_model(Institute, owner=user)
 
-        if(not institute["exist"]):
+        if (not institute["exist"]):
             return Response(resp_fail("Your Account isn't created properly", error_code=4001))
 
         institute = institute["data"]
@@ -132,7 +142,7 @@ class InstituteApi(ViewSet):
     def get_teachers(self, request, *args, **kwargs):
         user = request.user
         institute = get_model(Institute, owner=user)
-        if(not institute["exist"]):
+        if (not institute["exist"]):
             return Response(resp_fail("Your Account isn't created properly", error_code=4001))
 
         institute = institute["data"]

@@ -519,5 +519,6 @@ class AccountsUtils(ViewSet):
 
         data['subjects'] = SubjectSerialzier(subjects_lst, many=True).data
         data['institutes'] = InstituteSerializer(institutes, many=True).data
+        data["role"] = user.role
 
         return Response(resp_success("User Info Retrieved Successfully", data))

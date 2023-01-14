@@ -3,11 +3,11 @@ from urllib import request
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
 from accounts.models import User
-from accounts.utils import get_model
+from accounts.utils import get_model, required_data
 from batch.models import Batch
 from institute.models import Institute
 from .models import ActiveUser
-from batch.services import has_msg_perm
+from batch.services import has_msg_perm, create_batch_msg, create_msg, has_msg_perm_batch
 from .utils import ws_response
 
 
@@ -33,22 +33,18 @@ class InstituteNotifications(AsyncJsonWebsocketConsumer):
                                                self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None, **kwargs):
-        text_data_json = json.loads(text_data)
-        event_type = text_data_json["event_type"]
-        data = text_data_json["data"]
+        data_json = json.loads(text_data)
+        event_type = data_json["event_type"]
+        data = data_json["data"]
         user_role = await self.get_role()
 
         if (user_role != 'owner'):
-            await self.send({
-                "success": False,
-                "msg": None,
-                "error": "You are not owner"
-            })
+            ws_resp = ws_response(
+                "", {}, "You are not authorized to send notification.", 401)
+            await self.send(ws_resp)
 
-        await self.channel_layer.group_send(self.group_name, {
-            "type": event_type,
-            "message": ""
-        })
+        ws_resp = ws_response(event_type, data, "Notification Sent.")
+        await self.channel_layer.group_send(self.group_name, ws_resp)
 
     @database_sync_to_async
     def get_role(self):
@@ -119,17 +115,23 @@ class BatchNotifications(AsyncJsonWebsocketConsumer):
                 return False
 
             elif (user_role == "student"):
-                student_exist = Batch.objects.filter(batch_code=batch_code,
-                                                     students__in=[user
-                                                                   ]).exists()
-
-                if (student_exist):
+                if user in batch.students.all():
                     return True
-                return False
 
+                return False
             return False
         else:
             return False
+
+    async def receive(self, text_data=None, bytes_data=None, **kwargs):
+        text_data = json.loads(text_data)
+        event_type = text_data["event_type"]
+        if (event_type == "batch.message"):
+            await self.channel_layer.group_send(self.group_name, ws_response(event_type, data=text_data))
+
+    async def batch_message(self, data):
+        payload = data["data"]
+        return await self.send(payload)
 
 
 class UserToUserRealTime(AsyncJsonWebsocketConsumer):
@@ -149,27 +151,34 @@ class UserToUserRealTime(AsyncJsonWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None, **kwargs):
         data = json.loads(text_data)
         receiver_mobile = data["mobile"]
+        event_type = data['event_type']
         data = data["payload"]
 
         # Get Activate User Channel Name
         channel_name, receiver_user = await self.get_user_channel(receiver_mobile)
 
         if receiver_user:
-            if (has_msg_perm(receiver_user, self.user)):
+            has_perm = await database_sync_to_async(has_msg_perm)(self.user, receiver_user)
+            if (has_perm):
                 if (channel_name):
-                    ws_resp = ws_response("chat.receive", data, "Msg Sent")
-                    await self.channel_layer.send(channel_name, ws_resp)
+                    ws_resp = ws_response(event_type, data, "Msg Sent")
+                    return await self.channel_layer.send(channel_name, ws_resp)
             else:
                 ws_resp = ws_response(
                     "", {}, "You do not have permission to send Message.", 300)
-                await self.send(ws_resp)
+                return await self.send(ws_resp)
         else:
             ws_resp = ws_response("", {}, "The User Doesn't exists.", 404)
-            await self.send(ws_resp)
+            return await self.send(ws_resp)
 
-    async def chat_receive(self, data):
-        data = data["payload"]
-        await self.send(data)
+    # @database_sync_to_async
+    # def noti_teacher_request_accepted(self, data):
+    #     teacher_mobile = data.get("teacher_mobile", None)
+    #     batch_code = data.get("batch_code", None)
+    #     owner = self.user
+    #     data=get_model(User, id=int(teacher_mobile))
+    #     if(not data["exist"]):
+    #         await self.send()
 
     @database_sync_to_async
     def get_user_channel(self, mobile):
@@ -186,6 +195,10 @@ class UserToUserRealTime(AsyncJsonWebsocketConsumer):
             return False, to_user
 
         return receiver_channel.channel_name, receiver_channel.user
+
+    async def chat_receive(self, data):
+        data = data["payload"]
+        await self.send(data)
 
     @database_sync_to_async
     def add_user(self):

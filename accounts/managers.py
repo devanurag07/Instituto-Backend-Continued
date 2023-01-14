@@ -9,7 +9,7 @@ class CustomUserManager(BaseUserManager):
     use_in_migrations = True
 
     def create_user(self, mobile, password, **extra_fields):
-        if(not mobile):
+        if (not mobile):
             raise ValueError("Invalid Mobile Number...")
 
         # Extra Fields
@@ -23,7 +23,7 @@ class CustomUserManager(BaseUserManager):
 
     def create_superuser(self, mobile, password, **extra_fields):
 
-        if(not mobile):
+        if (not mobile):
             raise ValueError("Invalid Mobile Number...")
 
         # Extra Fields
@@ -52,3 +52,8 @@ class TeacherManager(BaseUserManager):
 
     def get_queryset(self, *args, **kwargs):
         return super().get_queryset(*args, **kwargs).filter(role=Roles.TEACHER)
+
+
+class ReceiptionistManager(BaseUserManager):
+    def get_queryset(self, *args, **kwargs):
+        return super().get_queryset(*args, **kwargs).filter(roles=Roles.RECEIPTIONIST)

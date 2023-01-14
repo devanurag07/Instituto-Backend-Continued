@@ -16,9 +16,7 @@ from channels.db import database_sync_to_async
 # Check For Blocked MSGS
 
 
-@database_sync_to_async
 def is_blocked(sender, receiver):
-
     sender_blocked = Blocked.objects.filter(
         blocked_by=receiver, victim=sender).exists()
 
@@ -41,11 +39,11 @@ def is_blocked(sender, receiver):
     }
 
 
-@database_sync_to_async
 def has_msg_perm(sender, receiver):
     sender_role = sender.role.lower()
     receiver_role = receiver.role.lower()
-
+    import pdb
+    pdb.set_trace()
     if (sender_role == "student" and receiver_role == "student"):
         return False
 
@@ -101,6 +99,8 @@ def has_msg_perm(sender, receiver):
     elif (sender_role == "student" and receiver_role == "teacher"):
         receiver_batches = Batch.objects.filter(teacher=receiver)
         sender_batches = Batch.objects.filter(students__in=[sender])
+        import pdb
+        pdb.set_trace()
         common_batches = sender_batches & receiver_batches
         if (common_batches.exists()):
             return True
@@ -109,7 +109,6 @@ def has_msg_perm(sender, receiver):
     return False
 
 
-@database_sync_to_async
 def create_msg(request, msg, reciever_id):
     user = request.user
     reciever_user = get_model(User, pk=int(reciever_id))
@@ -163,12 +162,11 @@ def create_msg(request, msg, reciever_id):
 
     return {
         "success": True,
-        "msg": msg_data
+        "data": msg_data
     }
 
 
 # Check Permission Of Sending MSG
-@database_sync_to_async
 def has_msg_perm_batch(batch, user):
     user_type = user.role.lower()
 
@@ -193,7 +191,6 @@ def has_msg_perm_batch(batch, user):
 # Creates MSG for Batc
 
 
-@database_sync_to_async
 def create_batch_msg(request, msg, batch_id):
     user = request.user
     batch = get_model(Batch, pk=int(batch_id))
@@ -232,12 +229,11 @@ def create_batch_msg(request, msg, batch_id):
 
     return {
         "success": True,
-        "msg": msg_data
+        "data": msg_data
     }
 
 
 # Retrieve MSGS
-@database_sync_to_async
 def get_convs(user):
     sent_msgs_recivers = Message.objects.filter(
         is_batch_msg=False, sender=user).values_list("receiver")
@@ -246,7 +242,6 @@ def get_convs(user):
 
 
 # BatchView
-@database_sync_to_async
 def get_batch_details(batch):
 
     class MessageSerializer(serializers.ModelSerializer):

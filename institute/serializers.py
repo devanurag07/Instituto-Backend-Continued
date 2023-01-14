@@ -10,6 +10,8 @@ class SubjectSerialzier(ModelSerializer):
 
 
 class SubjectAccessSerializer(ModelSerializer):
+    subject = SubjectSerialzier(read_only=True)
+
     class Meta:
         model = SubjectAccess
         fields = "__all__"

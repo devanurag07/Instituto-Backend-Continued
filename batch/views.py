@@ -16,8 +16,8 @@ from .permissions import BatchReadWritePermission, IsUserAuthenticated
 from batch.models import Batch, Document, Message, StudentRequest
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .services import get_batch_details
-
+from .services import get_batch_details, create_batch_msg
+from notifications.models import Notification
 # Create your views here.
 
 
@@ -91,11 +91,20 @@ class BatchApi(ModelViewSet):
             )
 
             if (batch_form.is_valid()):
-
                 batch_form.save()
+
+                Notification.objects.create(
+                    user=institute.owner,
+                    sender=request.user,
+                    noti_type="batch_created",
+                    noti_msg=f"{request.user.first_name} (Teacher) Created Batch {batch_code} ({subject.subject_name})"
+                )
+
                 return Response(resp_success("Batch Created Successfully",
                                              {
-                                                 "batch": batch_form.data
+                                                 "batch": batch_form.data,
+                                                 "notify": True,
+                                                 'notify_user': institute.owner.id
                                              }))
             else:
                 errors = batch_form.errors
@@ -180,7 +189,18 @@ class BatchApi(ModelViewSet):
                 batch.save()
                 std_request.delete()
 
-                return Response(resp_success("Added To Batch"))
+                # Notification
+                Notification.objects.create(
+                    sender=self.request.user,
+                    user=student,
+                    noti_type="student_added_to_batch",
+                    noti_msg=f"{self.request.user.first_name} (Teacher) Accepted The Request To Batch {batch.batch_code} ({batch.subject.subject_name}) "
+                )
+
+                return Response(resp_success("Added To Batch", {
+                    "notify": True,
+                    "notify_user": student.id
+                }))
 
         else:
             return Response(resp_fail("You are not authorized to approve request"))
@@ -215,6 +235,15 @@ class BatchApi(ModelViewSet):
                 StudentRequest.objects.filter(
                     student=student, batch=batch).delete()
                 batch.students.remove(student)
+
+                # Notification
+                Notification.objects.create(
+                    sender=self.request.user,
+                    user=student,
+                    noti_type="teacher_request_accepted",
+                    noti_msg=f"{self.request.user.first_name} (teacher) Remocved you from Batch {batch.batch_code} ({batch.subject.subject_name})  "
+                )
+
                 return Response(resp_success(f"{student.first_name} (Student) Son of {student.profile.father_name} and {student.profile.mother_name} Removed From {batch.batch_code} (Batch)"))
             else:
                 return Response(resp_fail("Student Does Not Belong To This Batch"))
@@ -267,7 +296,7 @@ class MessageAPI(ModelViewSet):
             return Response(resp_fail(error, resp, 802))
 
         return Response(resp_success(
-            "Message Sent Successfully", resp
+            "Message Sent Successfully", resp["data"]
         ))
 
     @action(methods=['POST'], detail=False, url_path="send_msg_batch")
@@ -278,13 +307,16 @@ class MessageAPI(ModelViewSet):
 
         if (not success):
             errors = req_data
-
             return resp_fail("Missing Arguments", {
                 "errors": errors
             }, 811)
 
         message, batch_id = req_data
         resp = create_batch_msg(request, message, batch_id)
+        if (resp["success"]):
+            return Response(resp_success("Msg Created Successfully", data=resp['data']))
+        else:
+            return Response(resp_fail("Failed To Sent Msg", resp['error']))
 
 
 class DocumentAPI(ModelViewSet):

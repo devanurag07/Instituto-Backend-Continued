@@ -3,7 +3,7 @@ from random import choices
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
-from accounts.managers import CustomUserManager, StudentManager, OwnerManager, TeacherManager
+from accounts.managers import CustomUserManager, StudentManager, OwnerManager, TeacherManager, ReceiptionistManager
 from accounts.roles import Roles
 from .valdiators import _validate_mobile
 from simple_history.models import HistoricalRecords
@@ -72,6 +72,15 @@ class Teacher(User):
 
     class Meta:
         proxy = True
+
+
+class Receiptionist(User):
+    default_type = Roles.RECEIPTIONIST
+    objects = ReceiptionistManager
+
+    class Meta:
+        proxy = True
+
 
 # OTP Models
 

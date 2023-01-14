@@ -6,3 +6,4 @@ class Roles(models.TextChoices):
     TEACHER = "Teacher", "TEACHER"
     OWNER = "Owner", "OWNER"
     NULL = "Null", "NULL"
+    RECEIPTIONIST = "Receiptionist", "RECEIPTIONIST"
